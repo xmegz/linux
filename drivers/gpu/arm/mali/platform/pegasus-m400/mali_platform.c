@@ -15,19 +15,25 @@
 #include <linux/version.h>
 #include "mali_kernel_common.h"
 #include "mali_osk.h"
+//#include "mali_utgard.h"
 #include "mali_platform.h"
 //#include "mali_linux_pm.h"
 
-#ifdef USING_MALI_PMM
-#include "mali_pmm.h"
-#endif
+#include "mali_pm.h"
+#include "mali_pmu.h"
 
 #include <linux/clk.h>
 #include <linux/err.h>
 #include <linux/platform_device.h>
 #include <linux/regulator/consumer.h>
 #include <linux/regulator/driver.h>
-
+#include <linux/version.h>
+#include <linux/pm.h>
+#ifdef CONFIG_PM_RUNTIME
+#include <linux/pm_runtime.h>
+#endif
+#include <asm/io.h>
+#include <linux/mali/mali_utgard.h>
 
 #include <asm/io.h>
 #include <mach/regs-pmu.h>
@@ -68,7 +74,7 @@ static unsigned int GPU_MHZ	= 1000000;
 int mali_gpu_clk = 533; /* 533 MHz */
 int mali_gpu_vol = 1125000;/* 1.1125 V */
 
-#ifdef CONFIG_MALI_DVFS
+#if defined(CONFIG_MALI_DVFS)
 #define MALI_DVFS_DEFAULT_STEP 0
 #endif
 
@@ -94,7 +100,7 @@ struct regulator *g3d_regulator = NULL;
 
 mali_io_address clk_register_map=0;
 
-_mali_osk_mutex_t *mali_dvfs_lock = 0;
+_mali_osk_lock_t *mali_dvfs_lock = 0;
 
 void mali_set_runtime_resume_params(int clk, int volt)
 {
@@ -143,12 +149,12 @@ void mali_regulator_enable(void)
 void mali_regulator_set_voltage(int min_uV, int max_uV)
 {
 	int voltage;
-#ifndef CONFIG_MALI_DVFS
+#if  !defined(CONFIG_MALI_DVFS)
 	min_uV = mali_gpu_vol;
 	max_uV = mali_gpu_vol;
 #endif
 
-	_mali_osk_mutex_wait(mali_dvfs_lock);
+	_mali_osk_lock_wait(mali_dvfs_lock, _MALI_OSK_LOCKMODE_RW);
 
 	if( IS_ERR_OR_NULL(g3d_regulator) )
 	{
@@ -161,7 +167,7 @@ void mali_regulator_set_voltage(int min_uV, int max_uV)
 	mali_gpu_vol = voltage;
 	MALI_DEBUG_PRINT(1, ("= regulator_get_voltage: %d \n",mali_gpu_vol));
 
-	_mali_osk_mutex_signal(mali_dvfs_lock);
+	_mali_osk_lock_signal(mali_dvfs_lock, _MALI_OSK_LOCKMODE_RW);
 }
 #endif
 
@@ -313,11 +319,11 @@ mali_bool mali_clk_set_rate(unsigned int clk, unsigned int mhz)
 	bis_vpll = MALI_TRUE;
 #endif
 
-#ifndef CONFIG_MALI_DVFS
+#if !defined(CONFIG_MALI_DVFS)
 	clk = mali_gpu_clk;
 #endif
 
-	_mali_osk_mutex_wait(mali_dvfs_lock);
+	_mali_osk_lock_wait(mali_dvfs_lock, _MALI_OSK_LOCKMODE_RW);
 
 	if (mali_clk_get(bis_vpll) == MALI_FALSE)
 	{
@@ -362,7 +368,7 @@ mali_bool mali_clk_set_rate(unsigned int clk, unsigned int mhz)
 
 	mali_clk_put(MALI_FALSE);
 
-	_mali_osk_mutex_signal(mali_dvfs_lock);
+	_mali_osk_lock_signal(mali_dvfs_lock, _MALI_OSK_LOCKMODE_RW);
 
 	return MALI_TRUE;
 }
@@ -376,7 +382,8 @@ static mali_bool init_mali_clock(void)
 	if (mali_clock != 0)
 		return ret; // already initialized
 
-	mali_dvfs_lock = _mali_osk_mutex_init(0, 0);
+	mali_dvfs_lock = _mali_osk_lock_init(_MALI_OSK_LOCKFLAG_NONINTERRUPTABLE
+			| _MALI_OSK_LOCKFLAG_ONELOCK, 0, 0);
 	if (mali_dvfs_lock == NULL)
 		return _MALI_OSK_ERR_FAULT;
 
@@ -390,11 +397,10 @@ static mali_bool init_mali_clock(void)
 
 
 #ifdef CONFIG_REGULATOR
-#ifdef USING_MALI_PMM
+//#ifdef USING_MALI_PMM
 	g3d_regulator = regulator_get(&mali_gpu_device.dev, "vdd_g3d");
-#else
-	g3d_regulator = regulator_get(NULL, "vdd_g3d");
-#endif
+//#else
+//	g3d_regulator = regulator_get(NULL, "vdd_g3d");
 
 	if (IS_ERR(g3d_regulator))
 	{
@@ -451,7 +457,7 @@ static mali_bool deinit_mali_clock(void)
 _mali_osk_errcode_t mali_platform_init()
 {
 	MALI_CHECK(init_mali_clock(), _MALI_OSK_ERR_FAULT);
-#ifdef CONFIG_MALI_DVFS
+#if defined(CONFIG_MALI_DVFS)
 	if (!clk_register_map) clk_register_map = _mali_osk_mem_mapioregion( CLK_DIV_STAT_G3D, 0x20, CLK_DESC );
 	if(!init_mali_dvfs_status(MALI_DVFS_DEFAULT_STEP))
 		MALI_DEBUG_PRINT(1, ("mali_platform_init failed\n"));
@@ -464,7 +470,7 @@ _mali_osk_errcode_t mali_platform_deinit()
 {
 	deinit_mali_clock();
 
-#ifdef CONFIG_MALI_DVFS
+#if defined(CONFIG_MALI_DVFS)
 	deinit_mali_dvfs_status();
 	if (clk_register_map )
 	{
@@ -480,9 +486,46 @@ void mali_gpu_utilization_handler(u32 utilization)
 {
 	if (bPoweroff==0)
 	{
-#ifdef CONFIG_MALI_DVFS
+#if defined(CONFIG_MALI_DVFS)
 		if(!mali_dvfs_handler(utilization))
 			MALI_DEBUG_PRINT(1,( "error on mali dvfs status in utilization\n"));
 #endif
 	}
 }
+
+
+/*int mali_platform_device_register(void)
+{
+	int err = -1;
+	MALI_DEBUG_PRINT(4, ("mali_platform_device_register() called\n"));
+
+	err = platform_device_add_resources(&mali_gpu_device, &mali_gpu_resource, ARRAY_SIZE(mali_gpu_resource));
+
+	
+		err = platform_device_add_data(&mali_gpu_device, &mali_gpu_data, sizeof(mali_gpu_data));
+		if(0 == err)
+		{
+			err = platform_device_register(&mali_gpu_device);
+			if(0 == err)
+			{
+#ifdef CONFIG_PM_RUNTIME
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37))
+				pm_runtime_set_autosuspend_delay(&mali_gpu_device.dev, 1000);
+				pm_runtime_use_autosuspend(&mali_gpu_device.dev);
+#endif
+				pm_runtime_enable(&mali_gpu_device.dev);
+#endif
+				return 0;
+			}
+		}
+		platform_device_unregister(&mali_gpu_device);
+	return err;
+}
+
+void mali_platform_device_unregister(void)
+{
+	MALI_DEBUG_PRINT(4, ("mali_platform_device_unregister() called\n"));
+
+	platform_device_unregister(&mali_gpu_device);
+
+} */

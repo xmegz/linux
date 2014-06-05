@@ -28,6 +28,7 @@
 #include <linux/workqueue.h>
 
 #define MAX_MALI_DVFS_STEPS 5
+//#define MALI_DVFS_STEPS MAX_MALI_DVFS_STEPS
 #define MALI_DVFS_WATING 10 // msec
 
 #ifdef CONFIG_EXYNOS_ASV

@@ -21,9 +21,9 @@
 
 void _mali_osk_dbgmsg( const char *fmt, ... )
 {
-	va_list args;
-	va_start(args, fmt);
-	vprintk(fmt, args);
+    va_list args;
+    va_start(args, fmt);
+    vprintk(fmt, args);
 	va_end(args);
 }
 
@@ -54,19 +54,11 @@ void _mali_osk_break(void)
 u32 _mali_osk_get_pid(void)
 {
 	/* Thread group ID is the process ID on Linux */
-	return (u32)current->tgid;
+	return (u32)current->pid;
 }
 
 u32 _mali_osk_get_tid(void)
 {
 	/* pid is actually identifying the thread on Linux */
-	u32 tid = current->pid;
-
-	/* If the pid is 0 the core was idle.  Instead of returning 0 we return a special number
-	 * identifying which core we are on. */
-	if (0 == tid) {
-		tid = -(1 + raw_smp_processor_id());
-	}
-
-	return tid;
+	return (u32)current->tgid;
 }

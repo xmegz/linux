@@ -103,12 +103,12 @@ mali_bool mali_clk_set_rate(unsigned int clk, unsigned int mhz);
 unsigned long mali_clk_get_rate(void);
 void mali_clk_put(mali_bool binc_mali_clk);
 
-#ifdef MALI_PMM_RUNTIME_JOB_CONTROL_ON
+#if defined(MALI_PMM_RUNTIME_JOB_CONTROL_ON)
 _mali_osk_errcode_t mali_platform_powerdown(u32 cores);
 _mali_osk_errcode_t mali_platform_powerup(u32 cores);
 #endif
 
-#ifdef CONFIG_MALI_DVFS
+#if defined(CONFIG_MALI_DVFS)
 #define MALI_DVFS_STEPS 5
 mali_bool init_mali_dvfs_status(int step);
 void deinit_mali_dvfs_status(void);
@@ -122,6 +122,10 @@ int change_dvfs_tableset(int change_clk, int change_step);
 #endif
 
 void mali_set_runtime_resume_params(int clk, int volt);
+
+extern struct resource mali_gpu_resource;
+extern struct platform_device mali_gpu_device;
+extern struct mali_gpu_device_data mali_gpu_data;
 
 #ifdef __cplusplus
 }

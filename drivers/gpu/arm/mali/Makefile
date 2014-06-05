@@ -9,12 +9,9 @@
 #
 
 USE_UMPV2=0
-USING_PROFILING ?= 1
+USING_PROFILING ?= 0
 USING_INTERNAL_PROFILING ?= 0
-USING_POWER_PERFORMANCE_POLICY ?= 0
-MALI_HEATMAPS_ENABLED ?= 0
 MALI_DMA_BUF_MAP_ON_ATTACH ?= 1
-MALI_PMU_PARALLEL_POWER_UP ?= 0
 
 # The Makefile sets up "arch" based on the CONFIG, creates the version info
 # string and the __malidrv_build_info.c file, and then call the Linux build
@@ -22,7 +19,7 @@ MALI_PMU_PARALLEL_POWER_UP ?= 0
 # over.
 
 # set up defaults if not defined by the user
-ARCH ?= arm
+ARCH ?= pegasus-m400
 
 OSKOS=linux
 FILES_PREFIX=
@@ -35,8 +32,6 @@ check_cc2 = \
 		echo "$(3)"; \
 	fi ;)
 
-# This conditional makefile exports the global definition ARM_INTERNAL_BUILD. Customer releases will not include arm_internal.mak
--include ../../../arm_internal.mak
 
 # Give warning of old config parameters are used
 ifneq ($(CONFIG),)
@@ -94,30 +89,17 @@ $(warning MALI_PLATFORM $(MALI_PLATFORM))
 endif
 
 # Set up build config
-export CONFIG_MALI400=m
-export CONFIG_MALI450=y
-
-export EXTRA_DEFINES += -DCONFIG_MALI400=1
-export EXTRA_DEFINES += -DCONFIG_MALI450=1
-
-ifneq ($(MALI_PLATFORM),)
-export EXTRA_DEFINES += -DMALI_FAKE_PLATFORM_DEVICE=1
-export MALI_PLATFORM_FILES = $(wildcard platform/$(MALI_PLATFORM)/*.c)
-endif
+#export CONFIG_MALI400=m
 
 ifeq ($(USING_PROFILING),1)
 ifeq ($(CONFIG_TRACEPOINTS),)
-$(warning CONFIG_TRACEPOINTS required for profiling)
+$(warning CONFIG_TRACEPOINTS reqired for profiling)
 else
 export CONFIG_MALI400_PROFILING=y
 export EXTRA_DEFINES += -DCONFIG_MALI400_PROFILING=1
 ifeq ($(USING_INTERNAL_PROFILING),1)
 export CONFIG_MALI400_INTERNAL_PROFILING=y
 export EXTRA_DEFINES += -DCONFIG_MALI400_INTERNAL_PROFILING=1
-endif
-ifeq ($(MALI_HEATMAPS_ENABLED),1)
-export MALI_HEATMAPS_ENABLED=y
-export EXTRA_DEFINES += -DCONFIG_MALI400_HEATMAPS_ENABLED
 endif
 endif
 endif
@@ -132,19 +114,9 @@ export CONFIG_MALI_SHARED_INTERRUPTS=y
 export EXTRA_DEFINES += -DCONFIG_MALI_SHARED_INTERRUPTS
 endif
 
-ifeq ($(USING_POWER_PERFORMANCE_POLICY),1)
-export CONFIG_MALI400_POWER_PERFORMANCE_POLICY=y
-export EXTRA_DEFINES += -DCONFIG_MALI400_POWER_PERFORMANCE_POLICY
-endif
-
-ifeq ($(MALI_PMU_PARALLEL_POWER_UP),1)
-export CONFIG_MALI_PMU_PARALLEL_POWER_UP=y
-export EXTRA_DEFINES += -DCONFIG_MALI_PMU_PARALLEL_POWER_UP
-endif
-
-ifneq ($(BUILD),release)
+#ifneq ($(BUILD),release)
 export CONFIG_MALI400_DEBUG=y
-endif
+#endif
 
 all: $(UMP_SYMVERS_FILE)
 	$(MAKE) ARCH=$(ARCH) -C $(KDIR) M=$(CURDIR) modules
